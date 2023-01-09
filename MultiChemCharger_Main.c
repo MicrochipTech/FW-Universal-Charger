@@ -95,8 +95,7 @@ void main()
     init_cal_registers();		// Calibrate various internal registers (Oscillator, offset voltages, etc.)
     init_serial_io();			// Initialize the serial I/O system if enabled
     // Start the ADC and preload valid data //
-    ADCON0 |= 0x02;		// Begin ADC conversion
-    
+
     while (1)	// Main While Loop:
     {
         if (SERIAL_INT_FLAG == 1)       // SMBUS system interrupt ready?

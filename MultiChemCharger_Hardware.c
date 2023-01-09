@@ -5202,7 +5202,7 @@ void update_status_leds(void)
  #endif	// end of MCP19125 Configuration
 // </editor-fold>
 
-// <editor-fold defaultstate="collapsed" desc="PIC16F1713 MCP1631 SEPIC">
+// <editor-fold defaultstate="collapsed" desc="PIC16F1716 MCP1631 SEPIC">
 #ifdef PIC16F1716_MCP1631_SEPIC
 /* The following hardware routines are specific to the reference board #102-00232 also known
  * as the MCP1631-MCC2 reference design.  This particular firmware source requries the PIC be
@@ -5601,6 +5601,413 @@ void update_status_leds(void)
 #endif		// PIC16F1713_MCP1631_SEPIC
 // </editor-fold>
 
+// <editor-fold defaultstate="collapsed" desc="PIC16F1776 MCP1631 SEPIC">
+#ifdef PIC16F1776_MCP1631_SEPIC
+/* The following hardware routines are specific to the reference board #102-00232 also known
+ * as the MCP1631-MCC2 reference design.  This particular firmware source requries the PIC be
+ * replaced with a PIC16F1716. This is a newer processor at a lower cost-point.  It includes
+ * additional resources internally including multiple PWM channels which allow for a simple
+ * duty-cycle adjustment to create the Vref for the MCP1631 (vs. bit-banging the output).
+ */
+
+#ifdef ENABLE_FIXED_CONFIG
+#include "MultiChemCharger_Values.h"
+#endif
+
+// Configuration bits //
+
+// CONFIG1
+#pragma config IESO = ON		// Internal/External Switchover Mode->Internal/External Switchover Mode is enabled
+#pragma config BOREN = ON		// Brown-out Reset Enable->Brown-out Reset enabled
+#pragma config PWRTE = OFF		// Power-up Timer Enable->PWRT disabled
+#pragma config FOSC = INTOSC    // Oscillator Selection Bits->INTOSC oscillator: I/O function on CLKIN pin
+#pragma config FCMEN = ON		// Fail-Safe Clock Monitor Enable->Fail-Safe Clock Monitor is enabled
+#pragma config MCLRE = ON		// MCLR Pin Function Select->MCLR/VPP pin function is MCLR
+#pragma config CP = OFF			// Flash Program Memory Code Protection->Program memory code protection is disabled
+#pragma config WDTE = OFF		// Watchdog Timer Enable->WDT disabled
+#pragma config CLKOUTEN = OFF   // Clock Out Enable->CLKOUT function is disabled. I/O or oscillator function on the CLKOUT pin
+
+// CONFIG2
+#pragma config WRT = OFF		// Flash Memory Self-Write Protection->Write protection off
+#pragma config LPBOR = OFF		// Low-Power Brown Out Reset->Low-Power BOR is disabled
+#pragma config PPS1WAY = ON		// Peripheral Pin Select one-way control->The PPSLOCK bit cannot be cleared once it is set by software
+#pragma config LVP = ON         // Low-Voltage Programming Enable->Low-Voltage Programming enabled
+#pragma config STVREN = ON		// Stack Overflow/Underflow Reset Enable->Stack Overflow or Underflow will cause a Reset
+#pragma config PLLEN = OFF		// Phase Lock Loop enable->4x PLL is always enabled
+#pragma config BORV = LO		// Brown-out Reset Voltage Selection->Brown-out Reset Voltage (Vbor), low trip point selected.
+#pragma config ZCD = OFF
+
+// Global Variables for this hardware implementation //
+unsigned short Vref_PWM_DC;	// Current value of the output PWM
+
+// External variables required by these routines
+extern struct charger_settings_t cs;	// Get access to Charger_Settings structure
+extern struct charger_data_t cd;		// Get access to Charger_Data structure
+
+// Defines specific to this hardware //
+#define PWM_MAX_DC 0x37A	// Maximum allowed duty cycle of the Vref generation PWM
+#define PWM_MIN_DC 0x02		// Minimum allowed duty cycle of the Vref generation PWM
+
+
+// Initialize the Hardware //
+void init_hardware()	// Hardware specific configuration
+{
+// Configure Oscillator //
+    OSCCON = 0x70;	// SPLLEN disabled; SCS FOSC; IRCF 8MHz_HF;
+    OSCTUNE = 0x00;	// TUN 0x0;
+
+// Configure I/O Registers //
+	LATA =	 0b00000000;	// Start with MCP1631 off
+	TRISA =  0b11101111;    /* 0=output, 1=input (tri-state) */
+    ANSELA = 0b00000111;	// 0B = select bits 0, 1 & 3 as analog bits,  0=Digital, 1=Analog
+    WPUA = 0x00;
+
+    LATB = 0x00;
+	TRISB = 0xC0;    /* 0=output, 1=input (tri-state) */
+    ANSELB = 0x00;
+    WPUB = 0x00;
+
+    LATC =  0b00000100;	// Set PWM output (PWM) high for MCP1631 safety
+	TRISC = 0b11011001;    /* RC3, RC4 are inputs.  0=output, 1=input (tri-state) */
+    ANSELC = 0x00;
+    WPUC = 0x00;
+
+    TRISE = 0x08;	// MCLR pin set to output
+    WPUE = 0x00;
+
+    GIE = 0;						// Disable interrupts
+    PPSLOCK = 0x55;
+    PPSLOCK = 0xAA;
+    PPSLOCKbits.PPSLOCKED = 0x00;	// Unlock PPS
+
+    RC1PPSbits.RC1PPS = 0x19;		// RC1->PWM3:PWM3OUT	Vref generation PWM
+    RC2PPSbits.RC2PPS = 0x1A;		// RC2->PWM4:PWM4OUT	500Khz Fsw generation PWM
+	SSPCLKPPSbits.SSPCLKPPS = 0x13;	// RC3->MSSP:SCL		I2C Clock Pin Selection
+    RC3PPSbits.RC3PPS = 0x21;		// RC3->MSSP:SCL
+    SSPDATPPSbits.SSPDATPPS = 0x14;	// RC4->MSSP:SDA		I2C Data Pin Selection
+    RC4PPSbits.RC4PPS = 0x22;		// RC4->MSSP:SDA
+    PPSLOCK = 0x55;
+    PPSLOCK = 0xAA;
+    PPSLOCKbits.PPSLOCKED = 0x01;	// Lock PPS
+
+
+// Configure output MOSFET drivers (safe powerup, so do this first thing)
+//	  This reference design doesn't have an output FET for protection due to the SEPIC topology.
+
+// Configure Timer-0 for 512uS/Tick
+	OPTION_REG = 0x02;	/* TMR0 1:8 prescale, 256 us per timer overflow */
+    OPTION_REGbits.nWPUEN = 0x01;	// Weak pullups Disabled
+
+// Configure Timer-2 for Vref Generation on RC1
+    T2CLKCON = 0x01;    // FOSC Clock Source
+    T2CON = 0x01;		// TMR2ON off; T2CKPS 1:4; T2OUTPS 1:1;
+    PR2 = 0xFF;			// PR2 FF;	// Set the period for 7.8125Khz (8-bits of resolution)
+    TMR2 = 0x00;		// Clear the timer
+    PIR1bits.TMR2IF = 0;	// Clearing IF flag.
+    T2CONbits.TMR2ON = 1;	// Start the Timer by writing to TMRxON bit
+
+// Configure PWM3 for Vreg Generation on RC1 (Uses Timer-2)
+    PWM3CON = 0x80;		// PWM3EN enabled; PWM3POL active_hi;
+    PWM3DCH = 0x1;		// PWM3DCH 0;
+    PWM3DCL = 0x0;		// PWM3DCL 0;
+    CCPTMRS2bits.P3TSEL = 0x00;	// Select timer 2 as source
+
+
+// Configure Timer-4 for MCP1631 switching frequency and max duty-cycle control on RC2
+    T4CLKCON = 0x01;// FOSC Clock Source
+    T4CON = 0x00;	// T4CKPS 1:1; T4OUTPS 1:1; TMR4ON off;
+    T4PR = 0x03;		// Set the period for 500Khz
+    T4TMR = 0x00;	// Clear the timer
+    PIR4bits.TMR4IF = 0;	// Clearing IF flag.
+    T4CONbits.TMR4ON = 1;	// Start TMR4
+
+// Configure PWM4 for Switching Frequency Generation on RC2 (Uses Timer-4)
+	PWM4CON = 0x00;	// PWM4POL active_high; PWM4EN disabled;
+    PWM4DCH = 0x01;	// PWM4DCH
+    PWM4DCL = 0xC0;	// PWM4DCL
+    CCPTMRS2bits.P4TSEL = 0x01;	// Select timer 4 as the source
+
+// Configure Interrupts //
+	PIE1 = 0;	// No hardware or I/O interrupts
+    PIE2 = 0;
+	INTCON = 0xc0; /* Global + Peripheral interrupts */
+
+    // Configure the FVR //
+    FVRCON = 0b10000011;        // Enable FVR, Temp Indicator disabled, Comparator/DAC buffer disabled, ADC Buffer gain is 4x (4.096V)
+    
+// Configure ADC //
+    ADCON0 = ADC_MUX_VIN | 0x01; // FVR Reference, Default input channel, module enabled
+    ADCON1 = 0b11100011;		 // Right Justified data, ADC 4 us/conv, FVR and VSS connected
+	ADCON2 = 0x00;				 // No autoconversion
+	
+// Enable input undervoltage lockout threshold //
+	// Not on this topology.  We use the ADC to do this.
+    
+} // End of init_hardware()
+
+
+
+void inc_iout( short increment)  	// Topology Specific function - Increase Current (Combined)
+{
+	int i;
+
+  for(i=0;i<increment;i++)				// Loop through the increment routine
+	{
+		if (Vref_PWM_DC <= PWM_MAX_DC)	// If DC is not maxed out
+			Vref_PWM_DC++;				// Increment PWM Duty Cycle register
+		else
+			Vref_PWM_DC = 2;			// Reset to minimum if we are out of range (shouldn't happen)
+	}
+
+    // Writing to 8 MSBs of PWM duty cycle in PWMDCH register
+    PWM3DCH = ((Vref_PWM_DC & 0x03FC)>>2);
+
+    // Writing to 2 LSBs of PWM duty cycle in PWMDCL register
+    PWM3DCL  |= ((Vref_PWM_DC & 0x0003)<<6);
+}
+
+
+short dec_iout( short decrement)	// Topology Specific function - Decrease Current (Combined)
+{
+	int i;
+
+	if (Vref_PWM_DC == PWM_MIN_DC)	// Are we already at the bottom (off)?
+		return(0);					// Return a fault code that we can't decrement any more
+
+	for(i=0;0<decrement;i++)
+	{
+		if(Vref_PWM_DC > PWM_MIN_DC)  // Must check for zero because 'Vref_PWM_DC' can roll to FF if not.
+			Vref_PWM_DC--;			  // Reduce value if we are not already at the bottom of the range
+		else
+		{
+			Vref_PWM_DC = PWM_MIN_DC; // Else, we are at the bottom (vl = vf = 0)
+			return(0);				  // Return a fault code that we can't go lower
+		}
+	}
+    // Writing to 8 MSBs of PWM duty cycle in PWMDCH register
+    PWM3DCH = ((Vref_PWM_DC & 0x03FC)>>2);
+
+    // Writing to 2 LSBs of PWM duty cycle in PWMDCL register
+    PWM3DCL = ((Vref_PWM_DC)<<6);
+	return(1);
+}
+
+
+void zero_iout(void)
+{
+	Vref_PWM_DC = PWM_MIN_DC;	/* Output current set to zero */
+
+	// Writing to 8 MSBs of PWM duty cycle in PWMDCH register
+    PWM3DCH = ((Vref_PWM_DC & 0x03FC)>>2);
+
+    // Writing to 2 LSBs of PWM duty cycle in PWMDCL register
+    PWM3DCL = ((Vref_PWM_DC)<<6);
+}
+
+
+void disable_charger(void)
+{
+	MCP1631_ENABLE = 0;	// Clear MCP1631 enable pin
+	NOP();
+	NOP();
+    PWM4CON = 0x00;	// Turn off PWM output
+	zero_iout();	// Drop reference to minimum
+}
+
+
+void enable_charger(void)
+{
+	zero_iout();	// Drop reference to minimum
+    PWM4CON = 0x80;	// Turn on PWM output
+	MCP1631_ENABLE = 1;	// Set MCP1631 enable pin
+}
+
+
+/***************************** PIC16F1713/6 FLASH ROUTINES ************************/
+
+void init_cal_registers(void)	// There are no internal parameters in the PIC16F171x
+{								// that require calibration at boot up.
+}
+
+
+/* This function writes 32 bytes (16 flash words) at a time to flash.
+ * The incoming address must be aligned to a row of memory.  Writing to a single
+ * memory location within a row is not supported.
+ */
+
+/* This ifdef is meant to save a little code and prevent flash writes when this device function was locked down.  */
+/* While it adds the ability to include MultiChemCharger_Values.h it locks out the ability for the GUI to change  */
+/* configuration settings. Be aware of this.  If you are testing compiling with the header file and still want to */ 
+/* be able to use the GUI then be sure to set the ENABLE_GUI_CONFIG and ENABLE_FIXED_CONFIG in the header file.   */
+#ifdef ENABLE_GUI_CONFIG   
+unsigned short write_flash(unsigned short addr, unsigned short counter)
+{
+    unsigned char b = 0;
+	if (addr < CAL_BASE_ADDR)           // Invalid address.  Should return a failure result
+	{
+        return 0x00; 
+    }
+
+    if (counter == 64)				// Write data if 64 bytes (32-words) have been received
+    {
+        /*if (addr == 0xe80)
+            NOP();
+        if (addr == 0xea0)
+            NOP();
+        if (addr == 0xeb0)
+            NOP();
+        if (addr == 0xec0)
+            NOP();*/
+//while (!SSPSTATbits.P)(NOP());
+        INTCONbits.GIE = 0;		// Disable Interrupts
+
+        /* Start by erasing 32 words from memory, one row. (Figure 10-4) */
+        if (addr == 0xe60 | addr == 0xe80 | addr == 0xea0 | addr == 0xec0)	// Valid starting addresses of complete rows of memory
+        {                       
+LED4_PIN ^= 1;            
+
+            PMADRH = (addr >> 8) & 0x7F;
+            PMADRL = addr & 0xFF;
+            PMCON1bits.CFGS = 0;	// Not configuration space, we are erasing program memory          
+            PMCON1bits.FREE = 1;	// Specify an erase operation
+            PMCON1bits.WREN = 1;	// Enable write
+
+            PMCON2 = 0x55;			// Unlock Sequence
+            PMCON2 = 0xAA;
+            PMCON1bits.WR = 1;
+            NOP();
+            NOP();
+            NOP();
+            PMCON1bits.WREN = 0;
+        }
+
+        // Now program a row of 16/32 words
+        // Per Figure 10-6 of the datasheet //
+        PMCON1bits.CFGS = 0;	// Not configuration space, we are programming the program memory registers
+        PMADRH = (addr >> 8) & 0x7F;		// Load the address to program
+        PMADRL = addr & 0xFF;
+        PMCON1bits.FREE = 0;	// Specify a write operation
+        PMCON1bits.LWLO = 1;	// Load write latches only
+        PMCON1bits.WREN = 1;	// Enable write
+
+        while (b < counter)				// Load the program memory latches with data one word at a time
+        {
+LED2_PIN ^= 1;     
+            PMDATL = flash_write_buf[(unsigned char)(b & 0xFF)];
+            b++;
+            PMDATH = flash_write_buf[(unsigned char)(b & 0x3F)];
+            b++;
+
+            if (addr == 0xee0)
+                NOP();
+
+            if (b < counter)
+            {
+                PMCON2 = 0x55;		// Unlock Sequence
+                PMCON2 = 0xAA;
+                PMCON1bits.WR = 1;
+                NOP();
+                NOP();
+
+                addr++;				// Increment the address
+                PMADRH = (addr >> 8) & 0x7F;	// Load the address to program
+                PMADRL = addr & 0xFF;
+            }
+        }
+
+        PMCON1bits.LWLO = 0;	// Load write latches
+        PMCON2 = 0x55;			// Unlock Sequence
+        PMCON2 = 0xAA;
+        PMCON1bits.WR = 1;
+        NOP();
+        NOP();
+        PMCON1bits.WREN = 0;
+        INTCONbits.GIE = 1;		// Re-enable Interrupts
+            if (addr > 0xee0)
+                NOP();
+        return 0x20; 
+    }
+    return 0x00;
+}
+#endif
+
+unsigned short read_flash(unsigned short addr)
+{
+    unsigned short a;
+
+    PMADRH = addr >> 8;
+    PMADRL = addr;
+    PMCON1bits.CFGS = 0;
+    PMCON1bits.RD = 1;
+    asm("nop");
+    asm("nop");
+    a = (unsigned short)(PMDATH << 8);
+	a |= PMDATL;
+    return a;
+}
+
+unsigned char check_for_uvlo(void)
+{
+    //There are no input dividers from Vin. Ignore this fault.
+    /*if (cd.adc_vin < cs.uvlo_adc_threshold_off)
+	{
+		return 1;
+	}*/
+    return 0;
+}
+
+void check_button(void)
+{
+}
+
+void hardware_custom_a(void)
+{
+}
+
+void connect_battery(void)
+{
+    /* Connect Battery Switch */
+     
+}
+
+#ifdef ENABLE_STATUS_LEDS
+void update_status_leds(void)
+{
+	// LED #1 - Charger Active
+	if(cd.charger_state != CHARGER_OFF)		// If the charger is active,
+		LED1_PIN = 1;						// Charger Active LED #1 on
+	else
+		LED1_PIN = 0;						// Charger Active LED #1 off
+
+	// LED #2 - Charger State (CC/CV)
+	if(cd.charger_state == CHARGER_LIION_CC ||	// If the charge state = CC
+		cd.charger_state == CHARGER_NIMH_RAPID ||
+		cd.charger_state == CHARGER_VRLA_CC ||
+		cd.charger_state == CHARGER_VRLAF_RAPID ||
+		cd.charger_state == CHARGER_LIFEPO4_CC)
+		LED2_PIN = 1;						// Charger CC/CV State LED #2 on
+	else
+		LED2_PIN = 0;						// Charger CC/CV State LED #2 off
+
+	// LED #3 - Charge Complete
+	if(cd.status.complete == 1)
+		LED3_PIN = 1;						// Charge Complete LED #3 on
+	else
+		LED3_PIN = 0;						// Charge Complete LED #3 off
+
+	// LED #4 - Fault LED
+        if((cd.status.word & 0x7FFF) != 0)       // These shutdown causes are not defined yet
+		LED4_PIN = 0;						// Fault LED #4 off
+
+	else									// All other shutdown_causes are true hard-faults
+		LED4_PIN = 1;						// Fault LED #4 on
+
+}
+#endif // end Enable Status LEDS
+
+#endif		// PIC16F1776_MCP1631_SEPIC
+// </editor-fold>
+
 // <editor-fold defaultstate="collapsed" desc="PIC16F883 Topology">
 #ifdef PIC16F883_MCP1631_SEPIC
 /* The following hardware routines are specific to the reference board #102-00232 also known
@@ -5652,21 +6059,22 @@ void interrupt isr()
 {
     if (PIR1bits.TMR1IF)			// Timer-1 Flagged?
 	{
-		PIR1bits.TMR1IF = 0;	// Clear flag
-		if (!VREF_PWM_PIN)		// If pin is low, then make it high
+    	if (!VREF_PWM_PIN)		// If pin is low, then make it high
+//        if (PORTCbits.RC1 == 0)
 		{
-			VREF_PWM_PIN = 1;
+            VREF_PWM_PIN = 1;
 			TMR1H = IRefOnHiBits;	// Change timer to on-time value (high byte)
 			TMR1L = IRefOn;			// (low byte)
 		}
 		else
 		{
-			VREF_PWM_PIN = 0;
+            VREF_PWM_PIN = 0;
 			TMR1H = IRefOffHiBits;	// Change timer to off-time value (high byte)
 			TMR1L = IRefOff;		// (low byte)
 		}
 	}
-	PIR1 = 0;	//!! CLear all INT flags
+    PIR1bits.TMR1IF = 0;	// Clear flag
+    //PIR1 = 0;	//!! CLear all INT flags
 }
 
 // Initialize the Hardware //
@@ -5678,14 +6086,14 @@ void init_hardware()	// Hardware specific configuration.  !!!! In process
 
 // Configure I/O Registers //
 
-	ANSEL = 0x0B;    /* B = select bits 0, 1 & 3 as analog inputs,  0=Digital, 1=Analog */
+	ANSEL = 0x07;    /* B = select bits 0, 1, 2 as analog inputs,  0=Digital, 1=Analog */
 	ANSELH = 0x00;   /* 0 = select bits 8-13 as digital bits, 0=Digital, 1=Analog */
 
 	PORTA = 0x00;
-	TRISA = 0xEF;    /* 0=output, 1=input (tri-state) */
+	TRISA = 0xEF;    /* RA7 is output, 0=output, 1=input (tri-state) */
 
     PORTB = 0x00;
-	TRISB = 0xC0;    /* 0=output, 1=input (tri-state) */
+	TRISB = 0xC0;    /* RB6, RB7 are outputs, 0=output, 1=input (tri-state) */
 
     PORTC = 0x00;
 	TRISC = 0x18;    /* RC3, RC4 are inputs.  0=output, 1=input (tri-state) */
@@ -5704,28 +6112,33 @@ void init_hardware()	// Hardware specific configuration.  !!!! In process
 
 // Configure Timer-2 MCP1631 switching frequency and max duty-cycle control on RC2
     T2CON = 0x00;		 // TMR2ON off; T2OUTPS 1:1; T2CKPS 1:1
-    PR2 = 0x03;			 // PR2 = 4 counts at 2Mhz;	// Set the period
+    PR2 = 0x03;			 // PR2 = 4 counts at 2Mhz;	// Set the frequency at 500kHz = 2MHz/4
     TMR2 = 0x00;		 // Clear the timer
     PIR1bits.TMR2IF = 0; // Clearing IF flag.
 
 // Configure PWM 1 for Switching Frequency Generation on RC2 (Uses Timer-2 above)
-	CCP1CON = 0x0C;  /* PWM Mode, single channel, Bits <5:4> are 2 ls bits of duty cycle, 2 us / 125 ns = 16, 25% of 16 = 4 = 00000001 00b */ \
-	CCPR1L = 0x01;   /* 8 ms bits of 10 bit duty cycle, 2 us / 125 ns = 16, 25% of 16 =  4 = 00000001 00b */
+	CCP1CON = 0x0C;  /* PWM Mode, single channel, Bits <5:4> are 2 LSbits of duty cycle, 2 us / 125 ns = 16, 25% of 16 = 4 = 00000001 00b */ \
+	CCPR1L = 0x01;   /* 8 MSbits of 10 bit duty cycle, 2 us / 125 ns = 16, 25% of 16 =  4 = 00000001 00b */
     T2CONbits.TMR2ON = 1;	// Start the Timer by writing to TMRxON bit
 
 // Configure Interrupts //
 //	INTCONbits.T0IE = 0;	// Timer 0 Overflow Interrupt Enable (512uS/Tick timer) We sample this manually in main loop.
-	PIE1bits.TMR1IE = 1;	// Timer 1 Interrupt enable (Vref bit-bang interrupt)
+	TMR1H = 0; //Clear
+    TMR1L = 0; //Clear
+    PIE1bits.TMR1IE = 1;	// Timer 1 Interrupt enable (Vref bit-bang interrupt)
 	INTCONbits.PEIE = 1;	// Enable unmasked peripheral interrupts
 	INTCONbits.GIE = 1;		// Enable Global Interrupts
 
+// Configure Timer-1 for bit banging pwm output to average and set current.
+    T1CON = 0x30;            // 1:8 scalar, Interrupt running at 250kHz
 
 // Configure ADC //
-    ADCON0 = ADC_MUX_VIN | 0x01; /* Default input channel */
-    ADCON1 = 0x20; /* ADC 4 us/conv */
+    ADCON0 = ADC_MUX_VIN | 0x81; /* Default input channel, ADC 4us/conv */
+    ADCON1 = 0x08; /* ADC left justified, VREF+ pin used as reference*/
 
  // Enable input undervoltage lockout threshold //
-	//!! We dont' have undervoltage configured via a comparator yet
+	//!! We dont' have undervoltage configured via a comparator yet.  This hardware does not have a resistor divider on the 
+    //input voltage rail that we can use at the ADC to measure.  If we did it would go to RA3.
 
 } // End of init_hardware()
 
@@ -5866,10 +6279,10 @@ unsigned short read_flash(unsigned short addr)
 
 unsigned char check_for_uvlo(void)
 {
-    if (cd.adc_vin < cs.uvlo_adc_threshold_off)
+    /*if (cd.adc_vin < cs.uvlo_adc_threshold_off)
 	{
 		return 1;
-	}
+	}*/ //Disabled because there is no ADC input for VIN
     return 0;
 }
 

@@ -1,8 +1,11 @@
-#include <xc.h>
+//#include "../../../../v2.40/pic/include/proc/pic16f883.h"
 #include <pic.h>
+#include <xc.h>
+#include <proc/pic16f1776.h>
 #include "MultiChemCharger_Main.h"
 #include "MultiChemCharger_Hardware.h"
 #include "MultiChemCharger_Serial.h"
+
 
 
 void init_serial_io(void)  /* Initialize SMBUS */
@@ -306,12 +309,19 @@ void init_serial_io(void)  /* Initialize SMBUS */
     SSP1CON3 = 0x05;
     SSP1IF = 0;			// Clear interrupt flag
 #endif
+    
+#ifdef PIC16F1776_MCP1631_SEPIC
+	SSP1ADD = 0x20;	
+    SSP1CON1 = 0x26;
+    SSP1CON2 = 0x00;
+    SSP1CON3 = 0x05;
+    SSP1IF = 0;			// Clear interrupt flag
+#endif
 
 #ifdef PIC16F883_MCP1631_SEPIC
 	SSPADD = 0x20;	
     SSPCON = 0x26;
     SSPCON2 = 0x00;
-//    SSP1CON3 = 0x05;	This part doesn't have this register set extension to the MSSP
     SSPIF = 0;			// Clear interrupt flag
 #endif
 }
@@ -322,7 +332,7 @@ void service_SMBUS()
 #ifdef ENABLE_SMBUS
     char a;                                 // General purpose local variables a & b & c
     unsigned short b;
-    short c;
+    short c =0;
     extern struct charger_data_t cd;        // Charger Live Data structure called 'cd'
     extern struct charger_settings_t cs;	// Charger Settings structure called 'cs'
     extern bit chrg_off_batt_connected; 
@@ -330,7 +340,6 @@ void service_SMBUS()
     extern bit start;
     
     SERIAL_INT_FLAG = 0;                    // Clear interupt flag
-    //SSPIF = 0;
     b = SSPSTAT;                            // Get current status of i2c   
     // <editor-fold defaultstate="collapsed" desc="SSPSTAT Register Bit Description ">
                                         // bit 7 SMP: Data Input Sample bit, 1=Slew rate disabled for 100kHz and 1MHz, 0=enabled for 400kHz
@@ -468,8 +477,15 @@ void service_SMBUS()
 
                 #ifdef ENABLE_GUI_CONFIG
 
-                c = write_flash(CAL_BASE_ADDR + (flashaddr & 0xfc), flashwritecounter); //aligns the address on 4 16bit words.
-
+//                c = write_flash(CAL_BASE_ADDR + (flashaddr & 0xfc), flashwritecounter); //aligns the address on 4 16bit words.
+// Testing a different alignment below to get the PIC16F1773 working.
+                if (flashwritecounter == 64)
+                {
+                    LED1_PIN ^= 1;
+                    CKP =1;
+                    LED3_PIN ^= 1;
+                    c = write_flash(CAL_BASE_ADDR + (flashaddr & 0xe0), flashwritecounter); //aligns the address on 16 16bit words.
+                }
                 if (c > 0) // counter at correct length, iterate.
                 { 
                     flashwritecounter = 0;              // Reset counter for next group of bits 
@@ -481,7 +497,8 @@ void service_SMBUS()
                 }
                 smbusaddr ++;
             }
-            //</editor-fold>            
+            //</editor-fold>   
+         
             CKP = 1;
             break;
         // </editor-fold>

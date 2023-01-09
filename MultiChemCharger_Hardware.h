@@ -348,9 +348,9 @@ enum button_state_t
 #define MCP1631_ENABLE PORTAbits.RA4 // Enable pin for MCP1631 (/SHDN)
 
 /* ADC-Channel Memory Offset Locations */
-#define ADC_MUX_VIN  (0x03 << 2)	// RA3, AN3
-#define ADC_MUX_VBAT (0x01 << 2)	// RA1, AN1
-#define ADC_MUX_IOUT (0x02 << 2)	// RA2, AN2
+#define ADC_MUX_VIN  0	            //EVK does not have a divider on Vin to measure. If adding it, then put it here.
+#define ADC_MUX_VBAT (0x02 << 2)	// RA1, AN1
+#define ADC_MUX_IOUT (0x01 << 2)	// RA2, AN2
 #define ADC_MUX_VREF 0				// Not available to ADC
 #define ADC_MUX_TEMP (0x00 << 2)	// RA0, AN0
 
@@ -364,6 +364,44 @@ enum button_state_t
 #define IOUT_LSB_ROLL (18)
 
 #endif
+//</editor-fold>
+
+// <editor-fold defaultstate="collapsed" desc="PIC16F1776 MCP1631 SEPIC">
+#ifdef PIC16F1776_MCP1631_SEPIC						// MCP1631RD-MCC2 DEMOBOARD with PIC16F1776 installed
+
+#define _XTAL_FREQ 8000000		// 8Mhz FOSC
+#define T0COUNTSPERSEC (1953)	// 512uS per interupt
+#define SERIAL_INT_FLAG SSP1IF
+
+/* Hardware Specific Defines */
+#define PCB_ID 2					// Reference design info passed to GUI //Good enough for now but should be incremented since it's a unique design.
+#define BUTTON_START PORTAbits.RA5	// Start/Stop button on demoboard
+#define BUTTON_RESET PORTAbits.RA7	// 'CHEM' button on demoboard
+#define LED_LIION PORTBbits.RB0		// Li-Ion LED	(RB0)
+#define LED_NIMH PORTBbits.RB1		// LED #4 Pin	(RB1)
+#define LED1_PIN PORTBbits.RB2		// LED #1 Pin	(RB2)
+#define LED2_PIN PORTBbits.RB3		// LED #2 Pin	(RB3)
+#define LED3_PIN PORTBbits.RB4		// LED #3 Pin	(RB4)
+#define LED4_PIN PORTBbits.RB5		// LED #4 Pin	(RB5)
+#define MCP1631_ENABLE PORTAbits.RA4	// Enable pin for MCP1631 (/SHDN)
+#define DEBUG_PIN_RC5 PORTCbits.RC5	// Status Pin
+
+/* ADC-Channel Memory Offset Locations */
+#define ADC_MUX_TEMP (0b000000 << 2)	// RA0, AN0
+#define ADC_MUX_VBAT (0b000010 << 2)	// RA2, AN2
+#define ADC_MUX_IOUT (0b000001 << 2)	// RA1, AN1
+#define ADC_MUX_VIN  (0b000011 << 2)	// RA3, AN3 //presently no divider on board
+#define ADC_MUX_VREF (0b111111 << 2)	// FVR Buffer 1 Output
+
+/* Temp Cal*/
+#define TEMP_CAL_ADDR (0x0000) // There is no TEMP_CAL register so just put in a bogus value so the complier doesn't complain.
+
+
+/* The LSB (ovfcon) for output current where the course
+ * control would need to be incremented. */
+#define IOUT_LSB_ROLL (18)
+
+#endif //PIC16F1776_MCP1631_SEPIC
 //</editor-fold>
 
 #ifdef	__cplusplus

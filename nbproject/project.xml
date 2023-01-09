@@ -44,6 +44,10 @@
                     <name>MCP19119_4A_Power_Tool_Charger</name>
                     <type>2</type>
                 </confElem>
+                <confElem>
+                    <name>PIC16F1776_MCP1631_SEPIC</name>
+                    <type>2</type>
+                </confElem>
             </confList>
             <formatting>
                 <project-formatting-style>false</project-formatting-style>

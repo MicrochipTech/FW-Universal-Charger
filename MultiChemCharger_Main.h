@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#define FWREV (0x0467)          
+#define FWREV (0x0469)          
 //volatile const int Charger[256] @0xe60 = 0x3fff; /* %%BRYAN%% */
 
 
@@ -94,7 +94,7 @@ extern "C" {
 
 
 // Un-comment only 1 of the following #defines to select the LED or bench-test modes
-#define ENABLE_STATUS_LEDS 				// Enable status LEDs
+//#define ENABLE_STATUS_LEDS 				// Enable status LEDs
 //#define ENABLE_BENCH_TEST_OUTPUT_PIN	// This is only for MCP19111 based hardware %%BRYAN%% adjust this comment to be more agnostic
 //#define FAST_RAMP_ENABLED 			// Enable this define if you want a fast ramp-up to the desired current. (!!CC mode only)
 //#define FAST_RAMP_ADC_COUNTS (50)	// Number of ADC counts below ideal that triggers the fast-step routine
@@ -147,7 +147,11 @@ unsigned char LED_TMR, LED_OnTime, LED_OffTime;
 volatile bit bLED_On;
 
 /* For writing to the FLASH memory */
+#ifdef PIC16F1776_MCP1631_SEPIC
+unsigned char flash_write_buf[64];
+#else
 unsigned char flash_write_buf[8];  
+#endif
 
 #define CAL_BASE_ADDR (0xe60)  //This is the address in flash where the calibration (16 words) for the GUI are stored. Changed to 0xe60 from 0xe80 to make more room
                                 //**IMPORTANT** if you change this address, then go change it in the MultiChemCharger_Values.h file
