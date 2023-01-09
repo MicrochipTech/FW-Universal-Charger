@@ -5858,14 +5858,11 @@ unsigned short write_flash(unsigned short addr, unsigned short counter)
             NOP();
         if (addr == 0xec0)
             NOP();*/
-//while (!SSPSTATbits.P)(NOP());
         INTCONbits.GIE = 0;		// Disable Interrupts
 
         /* Start by erasing 32 words from memory, one row. (Figure 10-4) */
         if (addr == 0xe60 | addr == 0xe80 | addr == 0xea0 | addr == 0xec0)	// Valid starting addresses of complete rows of memory
-        {                       
-LED4_PIN ^= 1;            
-
+        {                               
             PMADRH = (addr >> 8) & 0x7F;
             PMADRL = addr & 0xFF;
             PMCON1bits.CFGS = 0;	// Not configuration space, we are erasing program memory          
@@ -5891,8 +5888,7 @@ LED4_PIN ^= 1;
         PMCON1bits.WREN = 1;	// Enable write
 
         while (b < counter)				// Load the program memory latches with data one word at a time
-        {
-LED2_PIN ^= 1;     
+        {  
             PMDATL = flash_write_buf[(unsigned char)(b & 0xFF)];
             b++;
             PMDATH = flash_write_buf[(unsigned char)(b & 0x3F)];
@@ -5934,7 +5930,7 @@ LED2_PIN ^= 1;
 unsigned short read_flash(unsigned short addr)
 {
     unsigned short a;
-
+    LED4_PIN ^= 1;
     PMADRH = addr >> 8;
     PMADRL = addr;
     PMCON1bits.CFGS = 0;

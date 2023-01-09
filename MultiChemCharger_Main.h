@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#define FWREV (0x0469)          
+#define FWREV (0x0470)          
 //volatile const int Charger[256] @0xe60 = 0x3fff; /* %%BRYAN%% */
 
 

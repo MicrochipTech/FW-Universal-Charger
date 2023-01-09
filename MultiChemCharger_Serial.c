@@ -431,6 +431,7 @@ void service_SMBUS()
 
                     case CMD_CHARGER_READCONFIG:
                         shutdown = 1;
+                        CKP = 1;
                         load_saved_variables();
                         break;
 
@@ -481,9 +482,7 @@ void service_SMBUS()
 // Testing a different alignment below to get the PIC16F1773 working.
                 if (flashwritecounter == 64)
                 {
-                    LED1_PIN ^= 1;
                     CKP =1;
-                    LED3_PIN ^= 1;
                     c = write_flash(CAL_BASE_ADDR + (flashaddr & 0xe0), flashwritecounter); //aligns the address on 16 16bit words.
                 }
                 if (c > 0) // counter at correct length, iterate.
