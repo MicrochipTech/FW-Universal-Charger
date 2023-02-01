@@ -5659,7 +5659,7 @@ void init_hardware()	// Hardware specific configuration
 // Configure I/O Registers //
 	LATA =	 0b00000000;	// Start with MCP1631 off
 	TRISA =  0b11101111;    /* 0=output, 1=input (tri-state) */
-    ANSELA = 0b00000111;	// 0B = select bits 0, 1 & 3 as analog bits,  0=Digital, 1=Analog
+    ANSELA = 0b00001111;	// 0B = select bits 0, 1, 2, 3 as analog bits,  0=Digital, 1=Analog
     WPUA = 0x00;
 
     LATB = 0x00;
