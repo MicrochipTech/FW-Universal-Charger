@@ -5807,7 +5807,7 @@ void zero_iout(void)
 
 void disable_charger(void)
 {
-	MCP1631_ENABLE = 0;	// Clear MCP1631 enable pin
+	//MCP1631_ENABLE = 0;	// Clear MCP1631 enable pin //%%BRYAN%% I took this out to leave the MCP1631 on for current calibration.
 	NOP();
 	NOP();
     PWM4CON = 0x00;	// Turn off PWM output
@@ -5944,11 +5944,10 @@ unsigned short read_flash(unsigned short addr)
 
 unsigned char check_for_uvlo(void)
 {
-    //There are no input dividers from Vin. Ignore this fault.
-    /*if (cd.adc_vin < cs.uvlo_adc_threshold_off)
+    if (cd.adc_vin < cs.uvlo_adc_threshold_off)
 	{
 		return 1;
-	}*/
+	}
     return 0;
 }
 
@@ -5963,7 +5962,8 @@ void hardware_custom_a(void)
 void connect_battery(void)
 {
     /* Connect Battery Switch */
-     
+     zero_iout();	// Drop reference to minimum
+     MCP1631_ENABLE = 1;	// Set MCP1631 enable pin
 }
 
 #ifdef ENABLE_STATUS_LEDS

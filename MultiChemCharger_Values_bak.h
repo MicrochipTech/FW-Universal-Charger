@@ -27,26 +27,26 @@
 psect text,class=CODE,local,abs,ovrld,delta=2
 org 0xe60        // Change this line if you change the location in memory for the config/cal data
 _Cal_Data_Array:
-    dw 00CCh
-    dw 0287h
-    dw 06DBh
-    dw 05FBh
-    dw 094Dh
-    dw 0EDBh
-    dw 06E3h
-    dw 0B7Dh
-    dw 0EF1h
-    dw 0063h
-    dw 01F3h
-    dw 05DBh
-    dw 0258h
-    dw 03E8h
-    dw 050Eh
-    dw 029Fh
-    dw 0412h
-    dw 067Fh
+    dw 0119h
+    dw 052Dh
+    dw 09B8h
+    dw 020Bh
+    dw 0308h
+    dw 0503h
+    dw 035Bh
+    dw 05A9h
+    dw 0781h
+    dw 006Bh
+    dw 03E5h
+    dw 07C3h
+    dw 02DFh
+    dw 04D4h
+    dw 0663h
+    dw 0320h
+    dw 04AFh
+    dw 07CFh
     dw 00FAh
-    dw 0FFCh
+    dw 0741h
     dw 3FFFh
     dw 3FFFh
     dw 3FFFh
@@ -68,16 +68,16 @@ org 0xe80
 _Config_Data_Array:
     dw 0012h  // 0 uvlo_threshold_off;      // SFR Setting - UVLO off threshold
     dw 0018h  // 2 uvlo_threshold_on;       // SFR Setting - UVLO on threshold
-    dw 0EDFh  // 4 vbat_ov;                 // ADC Value - Output overvoltage shutdown threshold
-    dw 0A57h  // 6 vbat_pc;                 // ADC Value - Battery voltage PRE to CC
-    dw 0E86h  // 8 vbat_cv;                 // ADC Value - Battery voltage CC to CV
-    dw 00CDh  // 10 ibat_pc;                // ADC Value - Preconditioning battery current
-    dw 04B2h  // 12 ibat_cc;                // ADC Value - Charge current
-    dw 0173h  // 14 ibat_ct;                // ADC Value - Charge termination current
-    dw 0005h  // 16 ovcfcon_min;            // SFR Comparison - Minimum setting for output DAC
-    dw 005Fh  // 18 ovcfcon_max;            // SFR Comparison - Maximum setting for output DAC
-    dw 0723h  // 20 uvlo_adc_threshold_off; // ADC Value - Input UV threshold for turn off (ADC)
-    dw 08EDh  // 22 uvlo_adc_threshold_on;  // ADC Value - Input UV threshold to allow turn-on (ADC)
+    dw 05E9h  // 4 vbat_ov;                 // ADC Value - Output overvoltage shutdown threshold
+    dw 041Dh  // 6 vbat_pc;                 // ADC Value - Battery voltage PRE to CC
+    dw 05C6h  // 8 vbat_cv;                 // ADC Value - Battery voltage CC to CV
+    dw 0110h  // 10 ibat_pc;                // ADC Value - Preconditioning battery current
+    dw 077Ch  // 12 ibat_cc;                // ADC Value - Charge current
+    dw 01C0h  // 14 ibat_ct;                // ADC Value - Charge termination current
+    dw 0001h  // 16 ovcfcon_min;            // SFR Comparison - Minimum setting for output DAC
+    dw 00FFh  // 18 ovcfcon_max;            // SFR Comparison - Maximum setting for output DAC
+    dw 020Bh  // 20 uvlo_adc_threshold_off; // ADC Value - Input UV threshold for turn off (ADC)
+    dw 028Ah  // 22 uvlo_adc_threshold_on;  // ADC Value - Input UV threshold to allow turn-on (ADC)
     dw 0000h  // 24 restore_time_max;       // Counter Value & TextBox - RESTORE charge maximum time (in seconds, the GUI displays minutes)
     dw 0096h  // 26 dvdt_blank_time;        // Counter Value & TextBox - dV/dt blank time (in seconds, the GUI displays minutes)
     dw 0000h  // 28 rapid_time_max;         // Counter Value & TextBox - RAPID charge maximum time (in seconds, the GUI displays minutes)
@@ -87,15 +87,15 @@ _Config_Data_Array:
     dw 0000h  // 36 chemistry;              // Constant & TextBox - Chemistry (0 = Li-Ion, 1 = NiMH, 2 = VRLA CCCP, 3 = VRLA Fast, 4 = LiFePO4)
     dw 0000h  // 38 ovrefcon_ov;            // SFR Setting - MCP19125 specific - OVREFCON_OV sets the reference for OV comparator when enabled
     dw 0000h  // 40 ovrefcon_cv;            // SFR Setting - MCP19125 specific - OVREFCON_CV sets the reference for EA1 when enabled
-    dw 005Fh  // 42 vrefcon_max;            // SFR Setting - MCP19125 specific - Maximum value allowed for VREFCON - Basically max output current
-    dw 0E86h  // 44 vbat_fv;                // ADC Value - Battery voltage for float
+    dw 0000h  // 42 vrefcon_max;            // SFR Setting - MCP19125 specific - Maximum value allowed for VREFCON - Basically max output current
+    dw 05C6h  // 44 vbat_fv;                // ADC Value - Battery voltage for float
     dw 3FFEh  // 46 neg_dvdt;               // Constant & TextBox - Threshold for Negative dV/dt
     dw 0006h  // 48 pos_dvdt_cc;            // Constant & TextBox - Threshold for Positive dV/dt in CC mode
     dw 0004h  // 50 neg_didt_cv;            // Constant & TextBox - Threshold for Negative dI/dt in CV mode
     dw 0000h  // 52 pack_temp_25C;          // ADC Value - The calculated value for a 25C reading for reference
     dw 0FFFh  // 54 temp_1C;                // ADC Value - Represents the number of counts for a calculated 1C change
     dw 0000h  // 56 temp_sense_en;          // Constant & TextBox - Is temperature Enabled
-    dw 00CDh  // 58 ibat_fc;                // ADC Value - Maximum allowed Float Current
+    dw 0110h  // 58 ibat_fc;                // ADC Value - Maximum allowed Float Current
     dw 012Ch  // 60 precondition_max_time   // Counter Value & TextBox - Maximum time charger will try to restore/precondition a battery
     dw 000Ah  // 62 pc_dvdt                 // Constant & TextBox - Threshold for Positive dV/dt in PC mode
     dw 0000h  // 64 vbat_1C_adjust          // ADC Value - The adjustment to float voltage for every 1C change from 25C
@@ -108,7 +108,7 @@ _Config_Data_Array:
     dw 0003h  // 78 # of Cells              // TextBox
     dw 0BB8h  // 80 Precondition Voltage    // TextBox
     dw 0064h  // 82 Precondition Current    // TextBox
-    dw 03E8h  // 84 Charge Current          // TextBox
+    dw 05DCh  // 84 Charge Current          // TextBox
     dw 00FAh  // 86 Termination Current     // TextBox
     dw 01F4h  // 88 ADC Vref                // TextBox
     dw 000Ah  // 90 ADC Size                // TextBox
